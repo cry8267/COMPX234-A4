@@ -8,68 +8,75 @@ class UDPClient:
         self.host = host
         self.port = port
         self.file_list = file_list
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.socket.settimeout(1.0)  # 默认超时1秒
+        self.socket = None
         self.max_retries = 5
+        self.initial_timeout = 1.0
 
     def start(self):
         try:
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.socket.settimeout(1.0)
             with open(self.file_list, 'r') as f:
                 files_to_download = [line.strip() for line in f if line.strip()]
-                
+        
             if not files_to_download:
-                print("错误: 文件列表为空")
+                print("Error: The file list is empty.")
                 return
-                
+
             for filename in files_to_download:
-                self.download_file(filename)
-                
+                try:
+                    self.download_file(filename)
+                except Exception as e:
+                    print(f"Download {filename} Failure: {e}")
+                    continue
         except FileNotFoundError:
-            print(f"错误: 文件列表 {self.file_list} 不存在")
+            print(f"Error: File list {self.file_list} Doesn't exist")
         except Exception as e:
-            print(f"客户端错误: {e}")
+            print(f"Unable to read the file list.: {e}")
         finally:
-            self.socket.close()
+            if self.socket:
+                self.socket.close()
 
     def download_file(self, filename):
-        print(f"\n开始下载: {filename}")
+        print(f"\nStart downloading: {filename}")
         
         try:
-            # 发送DOWNLOAD请求
+            # Send DOWNLOAD request
             response = self.reliable_send_receive(
                 f"DOWNLOAD {filename}",
                 (self.host, self.port)
             )
-            
+        
             if response.startswith("ERR"):
-                print(f"下载失败: {response}")
+                print(f"Download failed: {response}")
                 return
                 
-            # 解析响应
+            # Analyze response
             parts = response.split()
             if len(parts) != 6 or parts[0] != "OK":
-                print("无效的服务器响应")
+                print("Invalid server response")
                 return
                 
             file_size = int(parts[3])
             data_port = int(parts[5])
             
-            print(f"文件大小: {file_size} 字节")
-            print("下载进度: [", end='', flush=True)
+            print(f"File size: {file_size} Byte")
+            print("Download progress: [", end='', flush=True)
             
-            # 开始接收文件
+            # Start receiving files
             self.receive_file_data(filename, file_size, data_port)
             
-            print("] 完成")
+            print("] Completed")
             
         except Exception as e:
-            print(f"\n下载 {filename} 失败: {e}")
+            print(f"\nDownload {filename} : {e}Failure")
+            raise
 
     def receive_file_data(self, filename, file_size, data_port):
         downloaded = 0
-        block_size = 1000  # 每个数据块1000字节
+        block_size = 1000 
         
-        # 确保下载目录存在
+        # Ensure the download directory exists
         os.makedirs("downloads", exist_ok=True)
         filepath = os.path.join("downloads", filename)
         
@@ -84,9 +91,9 @@ class UDPClient:
                 )
                 
                 if not response.startswith(f"FILE {filename} OK"):
-                    raise Exception(f"无效的响应: {response}")
+                    raise Exception(f"Invalid response: {response}")
                     
-                # 提取并解码数据
+                # Extract and decode data
                 data_start = response.find("DATA") + 5
                 base64_data = response[data_start:]
                 binary_data = base64.b64decode(base64_data)
@@ -95,39 +102,37 @@ class UDPClient:
                 file.write(binary_data)
                 downloaded += len(binary_data)
                 
-                # 显示进度
                 print("#", end='', flush=True)
             
-            # 发送关闭请求
             self.reliable_send_receive(
                 f"FILE {filename} CLOSE",
                 (self.host, data_port)
             )
 
     def reliable_send_receive(self, message, address):
-        current_timeout = 1.0  # 初始超时1秒
+        current_timeout = 1.0  
         attempt = 0
-        
         while attempt < self.max_retries:
             try:
+                
                 self.socket.sendto(message.encode(), address)
                 self.socket.settimeout(current_timeout)
-                
                 response, _ = self.socket.recvfrom(65535)
+                print(f"Received response: {response.decode()}")
                 return response.decode()
                 
             except socket.timeout:
                 attempt += 1
-                if attempt < self.max_retries:
-                    print(f"超时 (尝试 {attempt}/{self.max_retries}), 重试...")
-                    current_timeout *= 2  # 指数退避
-                continue
+                if attempt >= self.max_retries:
+                    raise Exception(f" The server did not respond, retrying.{self.max_retries} 次")
+                print(f"Overtime(Try{attempt}/{self.max_retries}), 重试...")
+                current_timeout *= 2
                 
-        raise Exception("达到最大重试次数，服务器无响应")
+        raise Exception("Reached the maximum number of retries, the server did not respond.")
 
 if __name__ == "__main__":
     if len(sys.argv) != 4:
-        print("用法: python UDPclient.py <主机> <端口> <文件列表>")
+        print("Usage: python UDPclient.py <host> <Port> <File list>")
         sys.exit(1)
         
     try:
@@ -139,6 +144,6 @@ if __name__ == "__main__":
         client.start()
         
     except ValueError:
-        print("错误: 端口号必须是整数")
+        print("Error: The port number must be an integer.")
     except Exception as e:
-        print(f"客户端错误: {e}")
+        print(f"Client error: {e}")

@@ -1,0 +1,2 @@
+This is the content of the test file.
+Used to verify UDP server response.

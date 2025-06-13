@@ -10,7 +10,7 @@ class UDPServer:
         self.port = port
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.server_socket.bind(('', port))
-        print(f"服务器已启动，监听端口 {port}")
+        print(f"The server has started and is listening on the port. {port}")
 
     def start(self):
         try:
@@ -21,7 +21,7 @@ class UDPServer:
                     args=(data, client_addr)
                 ).start()
         except KeyboardInterrupt:
-            print("\n服务器关闭中...")
+            print("\nThe server is shutting down...")
             self.server_socket.close()
 
     def handle_download_request(self, data, client_addr):
@@ -30,7 +30,7 @@ class UDPServer:
             parts = request.split()
             
             if len(parts) != 2 or parts[0] != "DOWNLOAD":
-                return  # 忽略无效请求
+                return  
                 
             filename = parts[1]
             if not os.path.exists(filename):
@@ -43,20 +43,18 @@ class UDPServer:
             file_size = os.path.getsize(filename)
             data_port = random.randint(50000, 51000)
             
-            # 发送OK响应
             self.server_socket.sendto(
                 f"OK {filename} SIZE {file_size} PORT {data_port}".encode(),
                 client_addr
             )
             
-            # 启动文件传输线程
             threading.Thread(
                 target=self.handle_file_transfer,
                 args=(filename, client_addr, data_port)
             ).start()
             
         except Exception as e:
-            print(f"处理请求时出错: {e}")
+            print(f"An error occurred while processing the request.: {e}")
 
     def handle_file_transfer(self, filename, client_addr, data_port):
         transfer_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -77,7 +75,7 @@ class UDPServer:
                             f"FILE {filename} CLOSE_OK".encode(),
                             client_addr
                         )
-                        print(f"文件 {filename} 传输完成")
+                        print(f"file {filename} Transmission complete")
                         break
                         
                     elif parts[0] == "FILE" and parts[2] == "GET":
@@ -95,17 +93,17 @@ class UDPServer:
                             transfer_socket.sendto(response.encode(), client_addr)
                             
                         except (ValueError, IndexError) as e:
-                            print(f"无效的文件请求: {request}")
+                            print(f"Invalid file request: {request}")
                             continue
                             
         except Exception as e:
-            print(f"文件传输错误: {e}")
+            print(f"File transfer error: {e}")
         finally:
             transfer_socket.close()
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("用法: python UDPserver.py <端口号>")
+        print("Usage: python UDPserver.py <Port number>")
         sys.exit(1)
         
     try:
@@ -113,6 +111,6 @@ if __name__ == "__main__":
         server = UDPServer(port)
         server.start()
     except ValueError:
-        print("错误: 端口号必须是整数")
+        print("Error: The port number must be an integer.")
     except Exception as e:
-        print(f"服务器错误: {e}")
+        print(f"Server error: {e}")
